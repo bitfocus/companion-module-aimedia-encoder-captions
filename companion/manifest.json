@@ -1,16 +1,16 @@
 {
-	"id": "your-module-name",
-	"name": "your-module-name",
-	"shortname": "module-shortname",
-	"description": "A short one line description of your module",
+	"id": "aimedia-hd1492-captions",
+	"name": "aimedia-hd1492-captions",
+	"shortname": "HD 1492 Captions",
+	"description": "Closed Captions from Ai Media / EEG Caption Encoder",
 	"version": "0.0.0",
 	"license": "MIT",
-	"repository": "git+https://github.com/bitfocus/companion-module-your-module-name.git",
-	"bugs": "https://github.com/bitfocus/companion-module-your-module-name/issues",
+	"repository": "git+https://github.com/phillipivan/companion-module-aimedia-hd1492-captions.git",
+	"bugs": "https://github.com/phillipivan/companion-module-aimedia-hd1492-captions/issues",
 	"maintainers": [
 		{
-			"name": "Your name",
-			"email": "Your email"
+			"name": "Phillip Ivan Pietruschka",
+			"email": "ivanpietruschka@gmail.com"
 		}
 	],
 	"runtime": {
@@ -20,7 +20,7 @@
 		"entrypoint": "../dist/main.js"
 	},
 	"legacyIds": [],
-	"manufacturer": "Your company",
-	"products": ["Your product"],
-	"keywords": []
+	"manufacturer": "AI Media",
+	"products": ["HD 1492", "HD 492"],
+	"keywords": ["Captions", "EEG"]
 }

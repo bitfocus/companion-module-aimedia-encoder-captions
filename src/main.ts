@@ -1,33 +1,143 @@
-import { InstanceBase, runEntrypoint, InstanceStatus, SomeCompanionConfigField } from '@companion-module/base'
+import {
+	InstanceBase,
+	runEntrypoint,
+	InstanceStatus,
+	SomeCompanionConfigField,
+	TCPHelper,
+} from '@companion-module/base'
 import { GetConfigFields, type ModuleConfig } from './config.js'
 import { UpdateVariableDefinitions } from './variables.js'
 import { UpgradeScripts } from './upgrades.js'
 import { UpdateActions } from './actions.js'
 import { UpdateFeedbacks } from './feedbacks.js'
+import { StatusManager } from './status.js'
+
+const REQUEST_CAPTIONS_STRING = `^A F1 O`
+const ERROR_MESSAGE = 'E1'
+const NEW_PARAGRAPH = '%-p'
+const RECONNECT_INTERVAL = 5000
 
 export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	config!: ModuleConfig // Setup in init()
+	#socket: TCPHelper | undefined = undefined
+	#statusManager = new StatusManager(this, { status: InstanceStatus.Connecting, message: 'Initialising' }, 1000)
+	#captions: string[] = []
+	#reconnectTimer: NodeJS.Timeout | undefined = undefined
+	#drainTimer: NodeJS.Timeout | undefined = undefined
 
 	constructor(internal: unknown) {
 		super(internal)
 	}
 
 	async init(config: ModuleConfig): Promise<void> {
-		this.config = config
-
-		this.updateStatus(InstanceStatus.Ok)
-
 		this.updateActions() // export actions
 		this.updateFeedbacks() // export feedbacks
 		this.updateVariableDefinitions() // export variable definitions
+		this.configUpdated(config).catch(() => {})
 	}
 	// When module gets deleted
 	async destroy(): Promise<void> {
-		this.log('debug', 'destroy')
+		this.log('debug', `destroy id: ${this.id} label: ${this.label}`)
+		if (this.#socket) {
+			this.#socket.destroy()
+		}
+		this.#clearReconnectTimer()
+		this.#clearDrainTimer()
+		this.#statusManager.destroy()
 	}
 
 	async configUpdated(config: ModuleConfig): Promise<void> {
 		this.config = config
+		process.title = this.label
+		this.#statusManager.updateStatus(InstanceStatus.Connecting)
+	}
+	#clearDrainTimer(): void {
+		if (this.#drainTimer) {
+			clearTimeout(this.#drainTimer)
+			this.#drainTimer = undefined
+		}
+	}
+
+	#clearReconnectTimer(): void {
+		if (this.#reconnectTimer) {
+			clearTimeout(this.#reconnectTimer)
+			this.#reconnectTimer = undefined
+		}
+	}
+
+	#reconnectionOnTimeout(host: string, port: number, timeout: number = RECONNECT_INTERVAL): void {
+		this.#reconnectTimer = setTimeout(() => {
+			this.initTcp(host, port)
+		}, timeout)
+	}
+
+	initTcp(host: string, port: number): void {
+		const errorEvent = (err: Error) => {
+			this.log('error', JSON.stringify(err))
+			this.#clearReconnectTimer()
+			this.#reconnectionOnTimeout(host, port)
+		}
+		const connectEvent = () => {
+			this.#statusManager.updateStatus(InstanceStatus.Ok)
+			this.#socket?.send(REQUEST_CAPTIONS_STRING).catch(() => {})
+		}
+		const dataEvent = (d: Buffer<ArrayBufferLike>) => {
+			console.log(`Data received: ${d}`)
+			this.#clearDrainTimer()
+			const captions = d.toString().split(NEW_PARAGRAPH)
+			captions.forEach((line) => {
+				if (line == ERROR_MESSAGE) {
+					this.log('error', `Error recieved`)
+					this.#statusManager.updateStatus(InstanceStatus.UnknownError)
+					return
+				} else {
+					this.#captions.push(line)
+				}
+				while (this.#captions.length > this.config.lines) {
+					this.#captions.shift()
+				}
+				let captionVar: string = ''
+				for (line of this.#captions) {
+					captionVar += line + '\n'
+				}
+				this.setVariableValues({ captions: captionVar })
+			})
+		}
+		const drainEvent = () => {
+			if (this.config.clearAfterInterval) {
+				this.#drainTimer = setInterval(() => {
+					this.#captions = []
+					this.setVariableValues({ captions: '' })
+				}, this.config.silenceInterval * 1000)
+			}
+		}
+		const endEvent = () => {
+			this.log('warn', `Disconnected from ${host}`)
+			this.#clearReconnectTimer()
+			this.#reconnectionOnTimeout(host, port)
+		}
+		const statusChangeEvent = (status: InstanceStatus, message: string | undefined) => {
+			this.#statusManager.updateStatus(status, message ?? '')
+		}
+		if (this.#socket) this.#socket.destroy()
+		if (host === '') {
+			this.#statusManager.updateStatus(InstanceStatus.BadConfig, 'No host')
+			return
+		}
+		this.#clearReconnectTimer()
+		this.#clearDrainTimer()
+		try {
+			this.#socket = new TCPHelper(host, port)
+			this.#socket.on('connect', connectEvent)
+			this.#socket.on('data', dataEvent)
+			this.#socket.on('drain', drainEvent)
+			this.#socket.on('end', endEvent)
+			this.#socket.on('error', errorEvent)
+			this.#socket.on('status_change', statusChangeEvent)
+		} catch (err) {
+			this.log('error', `Failed to initialize socket - ${err}`)
+			this.#statusManager.updateStatus(InstanceStatus.UnknownError)
+		}
 	}
 
 	// Return config fields for web config
