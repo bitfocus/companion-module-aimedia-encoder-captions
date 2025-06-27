@@ -14,8 +14,10 @@ import { StatusManager } from './status.js'
 
 const REQUEST_CAPTIONS_STRING = `\x015 F1 O\r\n`
 const ERROR_MESSAGE = 'E1'
-const NEW_PARAGRAPH = '%-p'
+const NEW_LINE = '%-p'
 const RECONNECT_INTERVAL = 5000
+const KEEP_ALIVE = ' \n'
+const KEEP_ALIVE_INTERVAL = 60000
 
 export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 	config!: ModuleConfig // Setup in init()
@@ -24,6 +26,8 @@ export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 	#captions: string[] = []
 	#reconnectTimer: NodeJS.Timeout | undefined = undefined
 	#drainTimer: NodeJS.Timeout | undefined = undefined
+	#keepAliveTimer: NodeJS.Timeout | undefined = undefined
+	#buffer: string = ''
 
 	constructor(internal: unknown) {
 		super(internal)
@@ -43,6 +47,7 @@ export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 		}
 		this.#clearReconnectTimer()
 		this.#clearDrainTimer()
+		this.#clearKeepAliveTimer()
 		this.#statusManager.destroy()
 	}
 
@@ -58,6 +63,22 @@ export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 			this.#drainTimer = undefined
 		}
 	}
+	#clearKeepAliveTimer(): void {
+		if (this.#keepAliveTimer) {
+			clearTimeout(this.#keepAliveTimer)
+			this.#keepAliveTimer = undefined
+		}
+	}
+
+	#startKeepAlive(kaInterval: number = KEEP_ALIVE_INTERVAL, msg: string = KEEP_ALIVE): void {
+		this.#clearKeepAliveTimer()
+		this.#keepAliveTimer = setTimeout(() => {
+			if (this.#socket && this.#socket.isConnected) {
+				this.#socket.send(msg).catch(() => {})
+			}
+			this.#startKeepAlive()
+		}, kaInterval)
+	}
 
 	#clearReconnectTimer(): void {
 		if (this.#reconnectTimer) {
@@ -66,9 +87,11 @@ export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 		}
 	}
 	async #requestCaptionsData(): Promise<boolean> {
-		if (!this.#socket) return false
-		this.log('debug', `Sending: ${REQUEST_CAPTIONS_STRING}`)
-		return await this.#socket?.send(REQUEST_CAPTIONS_STRING)
+		if (this.#socket && this.#socket.isConnected) {
+			this.log('debug', `Sending: ${REQUEST_CAPTIONS_STRING}`)
+			return await this.#socket.send(REQUEST_CAPTIONS_STRING)
+		}
+		return false
 	}
 
 	#reconnectionOnTimeout(host: string, port: number, timeout: number = RECONNECT_INTERVAL): void {
@@ -84,33 +107,53 @@ export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 			this.#reconnectionOnTimeout(host, port)
 		}
 		const connectEvent = () => {
+			this.#buffer = ''
 			this.#statusManager.updateStatus(InstanceStatus.Ok, `Connected`)
-			this.#requestCaptionsData().catch(() => {})
+			this.#requestCaptionsData()
+				.then((result) => {
+					if (!result) {
+						this.log('warn', `Caption request failed`)
+						this.#statusManager.updateStatus(InstanceStatus.UnknownWarning, `Caption request failed`)
+					} else {
+						this.log('debug', `Caption request sent`)
+					}
+				})
+				.catch(() => {})
 		}
 		const dataEvent = (d: Buffer<ArrayBufferLike>) => {
 			this.log(`debug`, `Data received: ${d}`)
 			this.#clearDrainTimer()
-			const captions = d.toString().split(NEW_PARAGRAPH)
-			if (captions.length > 0 && this.#captions.length > 0) {
-				this.#captions[this.#captions.length - 1] += captions.shift()
+			this.#clearKeepAliveTimer()
+			this.#buffer += d.toString().replaceAll(/[^a-zA-Z0-9-_.,"'>%? ]/gm, '')
+			while (this.#buffer.indexOf('  ') !== -1) {
+				this.#buffer.replaceAll('  ', ' ')
 			}
-			captions.forEach((line) => {
-				if (line == ERROR_MESSAGE) {
-					this.log('error', `Error recieved`)
-					this.#statusManager.updateStatus(InstanceStatus.UnknownError)
-					return
-				} else {
-					this.#captions.push(line)
-				}
+			let i = 0,
+				line = '',
+				offset = 0,
+				update = false
+			while ((i = this.#buffer.indexOf(NEW_LINE, offset)) !== -1) {
+				line = this.#buffer.substring(offset, i)
+				offset = i + 3
+				this.#captions.push(line)
+				update = true
+			}
+			if ((this.#buffer = this.#buffer.substring(offset)) == ERROR_MESSAGE) {
+				this.log('error', `Error recieved`)
+				this.#statusManager.updateStatus(InstanceStatus.UnknownError)
+				return
+			}
+			if (update) {
 				while (this.#captions.length > this.config.lines) {
 					this.#captions.shift()
 				}
 				let captionVar: string = ''
 				for (line of this.#captions) {
-					captionVar += line + '\n'
+					if (captionVar != '') captionVar += '\n'
+					captionVar += line
 				}
 				this.setVariableValues({ captions: captionVar })
-			})
+			}
 		}
 		const drainEvent = () => {
 			if (this.config.clearAfterInterval) {
@@ -119,6 +162,7 @@ export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 					this.setVariableValues({ captions: '' })
 				}, this.config.silenceInterval * 1000)
 			}
+			this.#startKeepAlive()
 		}
 		const endEvent = () => {
 			this.log('warn', `Disconnected from ${host}`)
@@ -135,6 +179,7 @@ export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 		}
 		this.#clearReconnectTimer()
 		this.#clearDrainTimer()
+		this.#clearKeepAliveTimer()
 		try {
 			this.#socket = new TCPHelper(host, port)
 			this.#socket.on('connect', connectEvent)
