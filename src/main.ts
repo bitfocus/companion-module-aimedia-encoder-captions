@@ -12,12 +12,12 @@ import { UpdateActions } from './actions.js'
 import { UpdateFeedbacks } from './feedbacks.js'
 import { StatusManager } from './status.js'
 
-const REQUEST_CAPTIONS_STRING = `^A F1 O`
+const REQUEST_CAPTIONS_STRING = `\x015 F1 O\r\n`
 const ERROR_MESSAGE = 'E1'
 const NEW_PARAGRAPH = '%-p'
 const RECONNECT_INTERVAL = 5000
 
-export class ModuleInstance extends InstanceBase<ModuleConfig> {
+export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 	config!: ModuleConfig // Setup in init()
 	#socket: TCPHelper | undefined = undefined
 	#statusManager = new StatusManager(this, { status: InstanceStatus.Connecting, message: 'Initialising' }, 1000)
@@ -50,6 +50,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		this.config = config
 		process.title = this.label
 		this.#statusManager.updateStatus(InstanceStatus.Connecting)
+		this.initTcp(config.host, config.port)
 	}
 	#clearDrainTimer(): void {
 		if (this.#drainTimer) {
@@ -63,6 +64,11 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			clearTimeout(this.#reconnectTimer)
 			this.#reconnectTimer = undefined
 		}
+	}
+	async #requestCaptionsData(): Promise<boolean> {
+		if (!this.#socket) return false
+		this.log('debug', `Sending: ${REQUEST_CAPTIONS_STRING}`)
+		return await this.#socket?.send(REQUEST_CAPTIONS_STRING)
 	}
 
 	#reconnectionOnTimeout(host: string, port: number, timeout: number = RECONNECT_INTERVAL): void {
@@ -78,13 +84,16 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			this.#reconnectionOnTimeout(host, port)
 		}
 		const connectEvent = () => {
-			this.#statusManager.updateStatus(InstanceStatus.Ok)
-			this.#socket?.send(REQUEST_CAPTIONS_STRING).catch(() => {})
+			this.#statusManager.updateStatus(InstanceStatus.Ok, `Connected`)
+			this.#requestCaptionsData().catch(() => {})
 		}
 		const dataEvent = (d: Buffer<ArrayBufferLike>) => {
-			console.log(`Data received: ${d}`)
+			this.log(`debug`, `Data received: ${d}`)
 			this.#clearDrainTimer()
 			const captions = d.toString().split(NEW_PARAGRAPH)
+			if (captions.length > 0 && this.#captions.length > 0) {
+				this.#captions[this.#captions.length - 1] += captions.shift()
+			}
 			captions.forEach((line) => {
 				if (line == ERROR_MESSAGE) {
 					this.log('error', `Error recieved`)
@@ -158,4 +167,4 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 	}
 }
 
-runEntrypoint(ModuleInstance, UpgradeScripts)
+runEntrypoint(HD1492_Captions, UpgradeScripts)
