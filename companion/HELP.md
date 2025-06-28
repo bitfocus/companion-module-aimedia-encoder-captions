@@ -1,19 +1,19 @@
-## AI Media HD 1492 Captions
+# AI Media Encoder Captions
 
 Connect to your iCap card and retrieve live caption data.
 
-### Config
+## Config
 
 The `Telnet` protocol must be enabled on the card. The companion module should connect to the port this protocol is configured to use.
 
-### Actions
+## Actions
 
 - None
 
-### Feedbacks
+## Feedbacks
 
 - None
 
-### Variables
+## Variables
 
 - Captions

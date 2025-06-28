@@ -740,9 +740,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"aimedia-hd1492-captions@workspace:.":
+"aimedia-encoder-captions@workspace:.":
   version: 0.0.0-use.local
-  resolution: "aimedia-hd1492-captions@workspace:."
+  resolution: "aimedia-encoder-captions@workspace:."
   dependencies:
     "@companion-module/base": "npm:~1.12.1"
     "@companion-module/tools": "npm:^2.3.0"

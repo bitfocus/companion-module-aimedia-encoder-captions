@@ -1,6 +1,6 @@
 {
-	"name": "aimedia-hd1492-captions",
-	"version": "0.1.0",
+	"name": "aimedia-encoder-captions",
+	"version": "1.0.0",
 	"main": "dist/main.js",
 	"type": "module",
 	"scripts": {
@@ -16,7 +16,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/phillipivan/companion-module-aimedia-hd1492-captions.git"
+		"url": "git+https://github.com/bitfocus/companion-module-aimedia-encoder-captions.git"
 	},
 	"engines": {
 		"node": "^22.14",

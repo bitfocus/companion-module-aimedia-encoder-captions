@@ -1,12 +1,12 @@
 {
-	"id": "aimedia-hd1492-captions",
-	"name": "aimedia-hd1492-captions",
-	"shortname": "HD 1492 Captions",
+	"id": "aimedia-encoder-captions",
+	"name": "aimedia-encoder-captions",
+	"shortname": "Encoder Captions",
 	"description": "Closed Captions from Ai Media / EEG Caption Encoder",
 	"version": "0.0.0",
 	"license": "MIT",
-	"repository": "git+https://github.com/phillipivan/companion-module-aimedia-hd1492-captions.git",
-	"bugs": "https://github.com/phillipivan/companion-module-aimedia-hd1492-captions/issues",
+	"repository": "git+https://github.com/bitfocus/companion-module-aimedia-encoder-captions.git",
+	"bugs": "https://github.com/bitfocus/companion-module-aimedia-encoder-captions/issues",
 	"maintainers": [
 		{
 			"name": "Phillip Ivan Pietruschka",
@@ -21,6 +21,6 @@
 	},
 	"legacyIds": [],
 	"manufacturer": "AI Media",
-	"products": ["HD 1492", "HD 492"],
+	"products": ["AV 610", "HD 1492", "HD 492"],
 	"keywords": ["Captions", "EEG"]
 }
