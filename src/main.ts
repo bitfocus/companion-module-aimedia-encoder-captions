@@ -159,6 +159,7 @@ export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 			if (this.config.clearAfterInterval) {
 				this.#drainTimer = setInterval(() => {
 					this.#captions = []
+					this.#buffer = ''
 					this.setVariableValues({ captions: '' })
 				}, this.config.silenceInterval * 1000)
 			}
