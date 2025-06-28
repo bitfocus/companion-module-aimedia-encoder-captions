@@ -6,3 +6,4 @@ package-lock.json
 DEBUG-*
 /.yarn
 aimedia-hd1492-captions-*.tgz
+aimedia-encoder-captions-*.tgz

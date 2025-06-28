@@ -38,7 +38,7 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 		{
 			type: 'number',
 			id: 'silenceInterval',
-			label: 'Clear after Silence duration (s)',
+			label: 'Clear after silence duration (s)',
 			width: 4,
 			default: 10,
 			min: 0,

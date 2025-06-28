@@ -19,9 +19,9 @@ const NEW_LINE = '%-p'
 const RECONNECT_INTERVAL = 5000
 const KEEP_ALIVE = ' \r\n'
 const KEEP_ALIVE_INTERVAL = 60000
-const VARIABLE_THROTTLE_RATE = 250
+const VARIABLE_THROTTLE_RATE = 500
 
-export class HD1492_Captions extends InstanceBase<ModuleConfig> {
+export class Encoder_Captions extends InstanceBase<ModuleConfig> {
 	config!: ModuleConfig // Setup in init()
 	#socket: TCPHelper | undefined = undefined
 	#statusManager = new StatusManager(this, { status: InstanceStatus.Connecting, message: 'Initialising' }, 1000)
@@ -124,7 +124,6 @@ export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 		const dataEvent = (d: Buffer<ArrayBufferLike>) => {
 			this.log(`debug`, `Data received: ${d}`)
 			this.#clearDrainTimer()
-			this.#clearKeepAliveTimer()
 			this.#buffer += d.toString().replaceAll(/[^a-zA-Z0-9-_.,"'>%? ]/gm, '')
 			this.#buffer = this.#buffer.replaceAll(NEW_LINE, '\n')
 			while (this.#buffer.indexOf('  ') !== -1) {
@@ -139,17 +138,10 @@ export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 			while (this.#buffer.split('\n').length > this.config.lines) {
 				this.#buffer = this.#buffer.substring(this.#buffer.indexOf('\n') + 1)
 			}
-			this.throttledVariableUpdate(this.#buffer)
-		}
-		const drainEvent = () => {
-			if (this.config.silenceInterval > 0) {
-				this.#drainTimer = setInterval(() => {
-					this.#buffer = ''
-					this.throttledVariableUpdate(this.#buffer)
-				}, this.config.silenceInterval * 1000)
-			}
+			this.throttledVariableUpdate()
 			this.#startKeepAlive()
 		}
+		const drainEvent = () => {}
 		const endEvent = () => {
 			this.log('warn', `Disconnected from ${host}`)
 			this.#clearReconnectTimer()
@@ -181,8 +173,15 @@ export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 	}
 
 	throttledVariableUpdate = throttle(
-		(value: string) => {
+		() => {
+			const value = this.#buffer.replaceAll('%-', '').replaceAll('%', '')
 			this.setVariableValues({ captions: value })
+			if (this.config.silenceInterval > 0) {
+				this.#drainTimer = setInterval(() => {
+					this.#buffer = ''
+					this.setVariableValues({ captions: this.#buffer })
+				}, this.config.silenceInterval * 1000)
+			}
 		},
 		VARIABLE_THROTTLE_RATE,
 		{ leading: false, trailing: true },
@@ -206,4 +205,4 @@ export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 	}
 }
 
-runEntrypoint(HD1492_Captions, UpgradeScripts)
+runEntrypoint(Encoder_Captions, UpgradeScripts)
