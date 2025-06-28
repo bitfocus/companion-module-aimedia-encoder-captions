@@ -4,7 +4,6 @@ export interface ModuleConfig {
 	host: string
 	port: number
 	lines: number
-	clearAfterInterval: boolean
 	silenceInterval: number
 }
 
@@ -37,21 +36,14 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 			default: 2,
 		},
 		{
-			type: 'checkbox',
-			id: 'clearAfterInterval',
-			label: 'Clear after silence',
-			width: 4,
-			default: true,
-		},
-		{
 			type: 'number',
 			id: 'silenceInterval',
-			label: 'Silence duration (s)',
+			label: 'Clear after Silence duration (s)',
 			width: 4,
-			default: 5,
-			min: 1,
-			max: 60,
-			//isVisible: (options) => {return options.clearAfterInterval},
+			default: 10,
+			min: 0,
+			max: 120,
+			tooltip: 'Set to 0 to disable',
 		},
 	]
 }

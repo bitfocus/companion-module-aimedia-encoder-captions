@@ -11,19 +11,20 @@ import { UpgradeScripts } from './upgrades.js'
 import { UpdateActions } from './actions.js'
 import { UpdateFeedbacks } from './feedbacks.js'
 import { StatusManager } from './status.js'
+import { throttle } from 'lodash'
 
 const REQUEST_CAPTIONS_STRING = `\x015 F1 O\r\n`
 const ERROR_MESSAGE = 'E1'
 const NEW_LINE = '%-p'
 const RECONNECT_INTERVAL = 5000
-const KEEP_ALIVE = ' \n'
+const KEEP_ALIVE = ' \r\n'
 const KEEP_ALIVE_INTERVAL = 60000
+const VARIABLE_THROTTLE_RATE = 250
 
 export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 	config!: ModuleConfig // Setup in init()
 	#socket: TCPHelper | undefined = undefined
 	#statusManager = new StatusManager(this, { status: InstanceStatus.Connecting, message: 'Initialising' }, 1000)
-	#captions: string[] = []
 	#reconnectTimer: NodeJS.Timeout | undefined = undefined
 	#drainTimer: NodeJS.Timeout | undefined = undefined
 	#keepAliveTimer: NodeJS.Timeout | undefined = undefined
@@ -125,42 +126,26 @@ export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 			this.#clearDrainTimer()
 			this.#clearKeepAliveTimer()
 			this.#buffer += d.toString().replaceAll(/[^a-zA-Z0-9-_.,"'>%? ]/gm, '')
+			this.#buffer = this.#buffer.replaceAll(NEW_LINE, '\n')
 			while (this.#buffer.indexOf('  ') !== -1) {
 				this.#buffer.replaceAll('  ', ' ')
 			}
-			let i = 0,
-				line = '',
-				offset = 0,
-				update = false
-			while ((i = this.#buffer.indexOf(NEW_LINE, offset)) !== -1) {
-				line = this.#buffer.substring(offset, i)
-				offset = i + 3
-				this.#captions.push(line)
-				update = true
-			}
-			if ((this.#buffer = this.#buffer.substring(offset)) == ERROR_MESSAGE) {
+			if (this.#buffer.startsWith(ERROR_MESSAGE)) {
 				this.log('error', `Error recieved`)
 				this.#statusManager.updateStatus(InstanceStatus.UnknownError)
-				return
+			} else {
+				this.#statusManager.updateStatus(InstanceStatus.Ok)
 			}
-			if (update) {
-				while (this.#captions.length > this.config.lines) {
-					this.#captions.shift()
-				}
-				let captionVar: string = ''
-				for (line of this.#captions) {
-					if (captionVar != '') captionVar += '\n'
-					captionVar += line
-				}
-				this.setVariableValues({ captions: captionVar })
+			while (this.#buffer.split('\n').length > this.config.lines) {
+				this.#buffer = this.#buffer.substring(this.#buffer.indexOf('\n') + 1)
 			}
+			this.throttledVariableUpdate(this.#buffer)
 		}
 		const drainEvent = () => {
-			if (this.config.clearAfterInterval) {
+			if (this.config.silenceInterval > 0) {
 				this.#drainTimer = setInterval(() => {
-					this.#captions = []
 					this.#buffer = ''
-					this.setVariableValues({ captions: '' })
+					this.throttledVariableUpdate(this.#buffer)
 				}, this.config.silenceInterval * 1000)
 			}
 			this.#startKeepAlive()
@@ -174,7 +159,7 @@ export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 			this.#statusManager.updateStatus(status, message ?? '')
 		}
 		if (this.#socket) this.#socket.destroy()
-		if (host === '') {
+		if (host.trim() === '') {
 			this.#statusManager.updateStatus(InstanceStatus.BadConfig, 'No host')
 			return
 		}
@@ -194,6 +179,14 @@ export class HD1492_Captions extends InstanceBase<ModuleConfig> {
 			this.#statusManager.updateStatus(InstanceStatus.UnknownError)
 		}
 	}
+
+	throttledVariableUpdate = throttle(
+		(value: string) => {
+			this.setVariableValues({ captions: value })
+		},
+		VARIABLE_THROTTLE_RATE,
+		{ leading: false, trailing: true },
+	)
 
 	// Return config fields for web config
 	getConfigFields(): SomeCompanionConfigField[] {
