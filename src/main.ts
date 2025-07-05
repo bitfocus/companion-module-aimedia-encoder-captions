@@ -174,6 +174,7 @@ export class Encoder_Captions extends InstanceBase<ModuleConfig> {
 
 	throttledVariableUpdate = throttle(
 		() => {
+			if (this.#buffer.trim() == ',') this.#buffer = ''
 			const value = this.#buffer.replaceAll('%-', '').replaceAll('%', '')
 			this.setVariableValues({ captions: value })
 			if (this.config.silenceInterval > 0) {
