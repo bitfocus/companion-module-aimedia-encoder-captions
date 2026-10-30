@@ -7,4 +7,5 @@ package-lock.json
 DEBUG-*
 /.yarn
 *.tgz
+.DS_Store
 /coverage
