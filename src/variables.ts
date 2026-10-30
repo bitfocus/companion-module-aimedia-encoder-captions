@@ -1,5 +1,9 @@
-import type { Encoder_Captions } from './main.js'
+import type ModuleInstance from './main.js'
 
-export function UpdateVariableDefinitions(self: Encoder_Captions): void {
-	self.setVariableDefinitions([{ variableId: 'captions', name: 'Captions' }])
+export type VariablesSchema = {
+	captions: string
+}
+
+export function UpdateVariableDefinitions(self: ModuleInstance): void {
+	self.setVariableDefinitions({ captions: { name: 'Captions' } })
 }

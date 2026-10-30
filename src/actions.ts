@@ -1,5 +1,7 @@
-import type { Encoder_Captions } from './main.js'
+import type ModuleInstance from './main.js'
 
-export function UpdateActions(self: Encoder_Captions): void {
+export type ActionSchema = Record<string, never>
+
+export function UpdateActions(self: ModuleInstance): void {
 	self.setActionDefinitions({})
 }

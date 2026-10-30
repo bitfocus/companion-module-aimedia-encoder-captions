@@ -1,5 +1,7 @@
-import type { Encoder_Captions } from './main.js'
+import type ModuleInstance from './main.js'
 
-export function UpdateFeedbacks(self: Encoder_Captions): void {
+export type FeedbackSchema = Record<string, never>
+
+export function UpdateFeedbacks(self: ModuleInstance): void {
 	self.setFeedbackDefinitions({})
 }

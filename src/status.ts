@@ -1,5 +1,5 @@
-import { InstanceBase, InstanceStatus } from '@companion-module/base'
-import type { ModuleConfig } from './config.js'
+import { type InstanceBase, InstanceStatus } from '@companion-module/base'
+import type { ModuleTypes } from './main.js'
 import { throttle } from 'lodash'
 
 export interface Status {
@@ -19,12 +19,12 @@ export interface Status {
 export class StatusManager {
 	#currentStatus: Status = { status: InstanceStatus.Disconnected, message: '' }
 	#newStatus: Status = { status: InstanceStatus.Disconnected, message: '' }
-	#parentInstance!: InstanceBase<ModuleConfig>
+	#parentInstance!: InstanceBase<ModuleTypes>
 	#throttleTimeout: number = 2000
 	#isDestroyed: boolean = false
 
 	constructor(
-		self: InstanceBase<ModuleConfig>,
+		self: InstanceBase<ModuleTypes>,
 		initStatus: Status = { status: InstanceStatus.Disconnected, message: null },
 		throttleTimeout: number = 2000,
 	) {
@@ -72,7 +72,7 @@ export class StatusManager {
 
 	private setNewStatus = throttle(
 		(newStatus: Status = this.#newStatus) => {
-			if (typeof newStatus.message === 'object') {
+			if (newStatus.message !== null && typeof newStatus.message === 'object') {
 				this.#parentInstance.updateStatus(newStatus.status, JSON.stringify(newStatus.message))
 			} else {
 				this.#parentInstance.updateStatus(newStatus.status, newStatus.message)

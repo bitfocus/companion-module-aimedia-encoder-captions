@@ -1,27 +1,31 @@
-import {
-	InstanceBase,
-	runEntrypoint,
-	InstanceStatus,
-	SomeCompanionConfigField,
-	TCPHelper,
-} from '@companion-module/base'
+import { InstanceBase, InstanceStatus, type SomeCompanionConfigField, TCPHelper } from '@companion-module/base'
 import { GetConfigFields, type ModuleConfig } from './config.js'
-import { UpdateVariableDefinitions } from './variables.js'
+import { UpdateVariableDefinitions, type VariablesSchema } from './variables.js'
 import { UpgradeScripts } from './upgrades.js'
-import { UpdateActions } from './actions.js'
-import { UpdateFeedbacks } from './feedbacks.js'
+import { UpdateActions, type ActionSchema } from './actions.js'
+import { UpdateFeedbacks, type FeedbackSchema } from './feedbacks.js'
 import { StatusManager } from './status.js'
+import { appendCaptionData, captionsValue } from './captions.js'
 import { throttle } from 'lodash'
+
+export { UpgradeScripts }
+
+export type ModuleTypes = {
+	config: ModuleConfig
+	secrets: undefined
+	actions: ActionSchema
+	feedbacks: FeedbackSchema
+	variables: VariablesSchema
+}
 
 const REQUEST_CAPTIONS_STRING = `\x015 F1 O\r\n`
 const ERROR_MESSAGE = 'E1'
-const NEW_LINE = '%-p'
 const RECONNECT_INTERVAL = 5000
 const KEEP_ALIVE = ' \r\n'
 const KEEP_ALIVE_INTERVAL = 60000
 const VARIABLE_THROTTLE_RATE = 500
 
-export class Encoder_Captions extends InstanceBase<ModuleConfig> {
+export default class ModuleInstance extends InstanceBase<ModuleTypes> {
 	config!: ModuleConfig // Setup in init()
 	#socket: TCPHelper | undefined = undefined
 	#statusManager = new StatusManager(this, { status: InstanceStatus.Connecting, message: 'Initialising' }, 1000)
@@ -75,7 +79,7 @@ export class Encoder_Captions extends InstanceBase<ModuleConfig> {
 		this.#clearKeepAliveTimer()
 		this.#keepAliveTimer = setTimeout(() => {
 			if (this.#socket && this.#socket.isConnected) {
-				this.#socket.send(msg).catch(() => {})
+				this.#socket.sendAsync(msg).catch(() => {})
 			}
 			this.#startKeepAlive()
 		}, kaInterval)
@@ -90,7 +94,7 @@ export class Encoder_Captions extends InstanceBase<ModuleConfig> {
 	async #requestCaptionsData(): Promise<boolean> {
 		if (this.#socket && this.#socket.isConnected) {
 			this.log('debug', `Sending: ${REQUEST_CAPTIONS_STRING}`)
-			return await this.#socket.send(REQUEST_CAPTIONS_STRING)
+			return await this.#socket.sendAsync(REQUEST_CAPTIONS_STRING)
 		}
 		return false
 	}
@@ -121,22 +125,15 @@ export class Encoder_Captions extends InstanceBase<ModuleConfig> {
 				})
 				.catch(() => {})
 		}
-		const dataEvent = (d: Buffer<ArrayBufferLike>) => {
+		const dataEvent = (d: Buffer) => {
 			this.log(`debug`, `Data received: ${d}`)
 			this.#clearDrainTimer()
-			this.#buffer += d.toString().replaceAll(/[^a-zA-Z0-9-_.,"'>%? ]/gm, '')
-			this.#buffer = this.#buffer.replaceAll(NEW_LINE, '\n')
-			while (this.#buffer.indexOf('  ') !== -1) {
-				this.#buffer.replaceAll('  ', ' ')
-			}
+			this.#buffer = appendCaptionData(this.#buffer, d.toString(), this.config.lines)
 			if (this.#buffer.startsWith(ERROR_MESSAGE)) {
 				this.log('error', `Error recieved`)
 				this.#statusManager.updateStatus(InstanceStatus.UnknownError)
 			} else {
 				this.#statusManager.updateStatus(InstanceStatus.Ok)
-			}
-			while (this.#buffer.split('\n').length > this.config.lines) {
-				this.#buffer = this.#buffer.substring(this.#buffer.indexOf('\n') + 1)
 			}
 			this.throttledVariableUpdate()
 			this.#startKeepAlive()
@@ -175,8 +172,7 @@ export class Encoder_Captions extends InstanceBase<ModuleConfig> {
 	throttledVariableUpdate = throttle(
 		() => {
 			if (this.#buffer.trim() == ',') this.#buffer = ''
-			const value = this.#buffer.replaceAll('%-', '').replaceAll('%', '')
-			this.setVariableValues({ captions: value })
+			this.setVariableValues({ captions: captionsValue(this.#buffer) })
 			if (this.config.silenceInterval > 0) {
 				this.#drainTimer = setInterval(() => {
 					this.#buffer = ''
@@ -205,5 +201,3 @@ export class Encoder_Captions extends InstanceBase<ModuleConfig> {
 		UpdateVariableDefinitions(this)
 	}
 }
-
-runEntrypoint(Encoder_Captions, UpgradeScripts)

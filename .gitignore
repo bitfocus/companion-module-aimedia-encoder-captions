@@ -1,9 +1,10 @@
 node_modules/
 package-lock.json
 /pkg
+/.vscode
 /*.tgz
 /dist
 DEBUG-*
 /.yarn
-aimedia-hd1492-captions-*.tgz
-aimedia-encoder-captions-*.tgz
+*.tgz
+/coverage
